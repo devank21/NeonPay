@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import Navbar from "../components/Navbar"; // 👈 import this
+import Navbar from "../components/Navbar";
 
 const Payment = () => {
   const [name, setName] = useState("");
@@ -19,47 +19,60 @@ const Payment = () => {
     if (!isLoggedIn) navigate("/login");
   }, [navigate]);
 
-  const generateQR = async () => {
+  const createPayment = async () => {
     if (name && upi && amount) {
       try {
-        const res = await axios.post("http://localhost:5000/api/payment", {
-          name,
-          upi,
-          amount,
-        });
+        const token = localStorage.getItem("token"); // Get the token
+        if (!token) {
+          alert("You are not logged in. Redirecting to login page.");
+          navigate("/login");
+          return null;
+        }
 
+        const res = await axios.post(
+          "http://localhost:5000/api/payment",
+          { name, upi, amount },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`, // ✅ Add the token to the request header
+            },
+          }
+        );
         const id = res.data.id;
         const link = `${window.location.origin}/pay/${id}`;
         setShareLink(link);
-        setShowQR(true);
+        return link;
       } catch (error) {
-        console.error("QR save failed:", error.response?.data || error.message);
-        alert("❌ Failed to generate QR");
+        console.error(
+          "Payment creation failed:",
+          error.response?.data || error.message
+        );
+        alert(
+          `❌ Failed to create payment: ${
+            error.response?.data?.error || "Check server connection"
+          }`
+        );
+        return null;
       }
     } else {
       alert("Please fill in all fields");
+      return null;
+    }
+  };
+
+  const generateQR = async () => {
+    const link = await createPayment();
+    if (link) {
+      setShowQR(true);
+      setShowLink(false);
     }
   };
 
   const generateLink = async () => {
-    if (name && upi && amount) {
-      try {
-        const response = await axios.post("http://localhost:5000/api/payment", {
-          name,
-          upi,
-          amount,
-        });
-
-        const id = response.data.id;
-        const link = `${window.location.origin}/pay/${id}`;
-        setShareLink(link);
-        setShowLink(true);
-      } catch (error) {
-        console.error("Link generation failed:", error);
-        alert("❌ Failed to generate link");
-      }
-    } else {
-      alert("Please fill in all fields");
+    const link = await createPayment();
+    if (link) {
+      setShowLink(true);
+      setShowQR(false);
     }
   };
 
@@ -70,12 +83,9 @@ const Payment = () => {
     }
   };
 
-  const upiURI = `upi://pay?pa=${upi}&pn=${name}&am=${amount}&cu=INR`;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black text-white">
       <Navbar />
-
       <div className="flex justify-center items-center p-4">
         <div className="bg-gray-950 p-8 rounded-2xl shadow-2xl w-full max-w-lg mt-10">
           <button
@@ -84,11 +94,9 @@ const Payment = () => {
           >
             ← Back
           </button>
-
           <h2 className="text-4xl font-bold text-center mb-8 bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-purple-500">
             Create Payment
           </h2>
-
           <div className="flex flex-col gap-4">
             <input
               type="text"
@@ -126,15 +134,13 @@ const Payment = () => {
               </button>
             </div>
           </div>
-
           <div className="mt-8 bg-white p-6 rounded-lg text-center">
-            {showQR && (
+            {showQR && shareLink && (
               <>
-                {shareLink && <QRCode value={shareLink} className="mx-auto" />}
+                <QRCode value={shareLink} className="mx-auto" />
                 <p className="text-black mt-2 font-semibold">Scan to Pay</p>
               </>
             )}
-
             {showLink && shareLink && (
               <div className="mt-4">
                 <p className="text-black break-words font-medium">

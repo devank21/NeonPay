@@ -1,70 +1,57 @@
-// pages/PaymentHistory.jsx
-import React, { useEffect, useState } from "react";
+// client/src/pages/PaymentHistory.jsx
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import Navbar from "../components/Navbar";
+import { io } from "socket.io-client";
 
 const PaymentHistory = () => {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
   const navigate = useNavigate();
 
-  const user = JSON.parse(localStorage.getItem("user"));
+  // Use useCallback to prevent re-creating the function on every render
+  const fetchPayments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const params = {
+        search,
+        status: status === "all" ? "" : status,
+      };
+
+      const response = await axios.get("http://localhost:5000/api/payments", {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+      });
+      setPayments(response.data);
+    } catch (error) {
+      console.error("Error fetching payment history:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, status]);
 
   useEffect(() => {
-    const fetchPayments = async () => {
-      try {
-        const response = await axios.get("http://localhost:5000/api/payments", {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
-        const filtered = response.data.filter((p) => p.userId === user?.id);
-        setPayments(filtered);
-      } catch (error) {
-        console.error("Error fetching payment history:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchPayments();
-  }, [user?.id]);
+  }, [fetchPayments]);
 
-  const Navbar = () => (
-    <div className="bg-gray-900 text-white py-4 px-8 shadow-md shadow-purple-500 flex justify-between items-center">
-      <h1 className="text-2xl font-bold">NeonPay</h1>
-      <div className="space-x-4">
-        <button
-          onClick={() => navigate("/account")}
-          className="hover:underline"
-        >
-          Account
-        </button>
-        <button
-          onClick={() => navigate("/payment")}
-          className="hover:underline"
-        >
-          Create
-        </button>
-        <button
-          onClick={() => navigate("/history")}
-          className="hover:underline font-semibold border-b-2 border-purple-400"
-        >
-          History
-        </button>
-        <button
-          onClick={() => {
-            localStorage.removeItem("loggedIn");
-            localStorage.removeItem("user");
-            navigate("/login");
-          }}
-          className="bg-purple-600 text-white px-4 py-1 rounded-full hover:bg-purple-700"
-        >
-          Sign Out
-        </button>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+    const socket = io("http://localhost:5000", { auth: { token } });
+    socket.on("paymentUpdated", (updatedPayment) => {
+      setPayments((prev) =>
+        prev.map((p) => (p._id === updatedPayment._id ? updatedPayment : p))
+      );
+    });
+    return () => socket.disconnect();
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -74,12 +61,25 @@ const PaymentHistory = () => {
           Payment History
         </h2>
 
-        <button
-          className="mb-6 px-4 py-2 bg-gradient-to-r from-gray-700 to-gray-900 rounded-full text-white hover:scale-105 transition"
-          onClick={() => navigate("/account")}
-        >
-          ← Back to Home
-        </button>
+        {/* ✅ NEW: Filter and Search UI */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <input
+            type="text"
+            placeholder="Search by name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-grow px-4 py-2 rounded bg-gray-800 border border-gray-700"
+          />
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="px-4 py-2 rounded bg-gray-800 border border-gray-700"
+          >
+            <option value="all">All Statuses</option>
+            <option value="Paid">Paid</option>
+            <option value="Unpaid">Unpaid</option>
+          </select>
+        </div>
 
         {loading ? (
           <p className="text-center text-gray-400">Loading...</p>
@@ -105,7 +105,17 @@ const PaymentHistory = () => {
                     <td className="px-4 py-2">
                       {new Date(p.createdAt).toLocaleString()}
                     </td>
-                    <td className="px-4 py-2">{p.status || "Unpaid"}</td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          p.status === "Paid"
+                            ? "bg-green-500 text-white"
+                            : "bg-yellow-500 text-black"
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    </td>
                     <td className="px-4 py-2">
                       <button
                         onClick={() => navigate(`/pay/${p._id}`)}
@@ -121,7 +131,7 @@ const PaymentHistory = () => {
           </div>
         ) : (
           <p className="text-center py-4 text-gray-400">
-            No payment history found.
+            No payment history found for the current filters.
           </p>
         )}
       </div>

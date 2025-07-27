@@ -1,5 +1,7 @@
+// client/src/pages/Login.jsx
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom"; // <-- Added Link
+import { useNavigate, Link } from "react-router-dom";
+import axios from "axios";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -14,14 +16,24 @@ const Login = () => {
     }
   }, [navigate]);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (username === "admin" && password === "admin") {
+    setError("");
+    try {
+      const res = await axios.post("http://localhost:5000/api/auth/login", {
+        username,
+        password,
+      });
+
+      // ✅ Store the token and user data from the server
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
       localStorage.setItem("loggedIn", "true");
-      localStorage.setItem("user", JSON.stringify({ username }));
+      localStorage.setItem("username", res.data.user.username); // Store username
+
       navigate("/account");
-    } else {
-      setError("Invalid credentials. Use admin/admin.");
+    } catch (err) {
+      setError(err.response?.data?.error || "Login failed. Please try again.");
     }
   };
 
@@ -38,6 +50,7 @@ const Login = () => {
             className="px-4 py-2 bg-gray-800 border border-gray-700 rounded"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            required
           />
           <input
             type="password"
@@ -45,6 +58,7 @@ const Login = () => {
             className="px-4 py-2 bg-gray-800 border border-gray-700 rounded"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
           />
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <button
@@ -55,7 +69,6 @@ const Login = () => {
           </button>
         </form>
 
-        {/* ✅ Signup link */}
         <p className="mt-4 text-center text-gray-400">
           Don’t have an account?{" "}
           <Link to="/signup" className="text-purple-400 hover:underline">
