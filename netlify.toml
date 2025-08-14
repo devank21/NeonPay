@@ -1,6 +1,6 @@
 [build]
   command = "npm run build"
-  publish = "client/build"
+  publish = "build" # <-- This is the only line that needs to change
   base = "client"
 
 [[redirects]]
