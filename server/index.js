@@ -177,8 +177,8 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(5000, () =>
-  console.log(
-    "🚀 Server running with WebSocket support at http://localhost:5000"
-  )
+const PORT = process.env.PORT || 5000;
+
+server.listen(PORT, "0.0.0.0", () =>
+  console.log(`🚀 Server running with WebSocket support on port ${PORT}`)
 );
