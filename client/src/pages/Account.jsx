@@ -17,9 +17,12 @@ const Account = () => {
     const fetchStats = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/stats", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await axios.get(
+          "https://neonpay-server.onrender.com/api/stats",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
         setStats(res.data);
       } catch (error) {
         console.error("Failed to fetch stats", error);

@@ -22,10 +22,13 @@ const PaymentHistory = () => {
         status: status === "all" ? "" : status,
       };
 
-      const response = await axios.get("http://localhost:5000/api/payments", {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-      });
+      const response = await axios.get(
+        "https://neonpay-server.onrender.com/api/payments",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params,
+        }
+      );
       setPayments(response.data);
     } catch (error) {
       console.error("Error fetching payment history:", error);
@@ -44,7 +47,9 @@ const PaymentHistory = () => {
       navigate("/login");
       return;
     }
-    const socket = io("http://localhost:5000", { auth: { token } });
+    const socket = io("https://neonpay-server.onrender.com", {
+      auth: { token },
+    });
     socket.on("paymentUpdated", (updatedPayment) => {
       setPayments((prev) =>
         prev.map((p) => (p._id === updatedPayment._id ? updatedPayment : p))

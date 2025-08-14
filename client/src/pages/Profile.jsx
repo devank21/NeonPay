@@ -13,9 +13,12 @@ const Profile = () => {
     const fetchProfile = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/user/profile", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await axios.get(
+          "https://neonpay-server.onrender.com/api/user/profile",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
         setUsername(res.data.username);
       } catch (error) {
         console.error("Failed to fetch profile", error);
@@ -29,7 +32,7 @@ const Profile = () => {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.put(
-        "http://localhost:5000/api/user/profile",
+        "https://neonpay-server.onrender.com/api/user/profile",
         { username },
         { headers: { Authorization: `Bearer ${token}` } }
       );

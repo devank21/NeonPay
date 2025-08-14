@@ -15,7 +15,9 @@ const QRPage = () => {
 
   const fetchPayment = useCallback(async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/payment/${id}`);
+      const res = await axios.get(
+        `https://neonpay-server.onrender.com/api/payment/${id}`
+      );
       setUpiURI(res.data.upiURI);
       if (res.data.status !== status) {
         setStatus(res.data.status);
@@ -39,7 +41,9 @@ const QRPage = () => {
       navigate("/login");
       return;
     }
-    const socket = io("http://localhost:5000", { auth: { token } });
+    const socket = io("https://neonpay-server.onrender.com", {
+      auth: { token },
+    });
 
     socket.on("paymentUpdated", (updatedPayment) => {
       if (updatedPayment._id === id) {

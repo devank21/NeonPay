@@ -1,4 +1,3 @@
-// pages/Payment.jsx
 import React, { useState, useEffect } from "react";
 import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
@@ -12,17 +11,18 @@ const Payment = () => {
   const [showQR, setShowQR] = useState(false);
   const [showLink, setShowLink] = useState(false);
   const [shareLink, setShareLink] = useState("");
+  const [upiURI, setUpiURI] = useState(""); // ✅ NEW: State for the direct UPI URI
   const navigate = useNavigate();
 
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("loggedIn");
+    const isLoggedIn = !!localStorage.getItem("token");
     if (!isLoggedIn) navigate("/login");
   }, [navigate]);
 
   const createPayment = async () => {
     if (name && upi && amount) {
       try {
-        const token = localStorage.getItem("token"); // Get the token
+        const token = localStorage.getItem("token");
         if (!token) {
           alert("You are not logged in. Redirecting to login page.");
           navigate("/login");
@@ -30,18 +30,23 @@ const Payment = () => {
         }
 
         const res = await axios.post(
-          "http://localhost:5000/api/payment",
+          "https://neonpay-server.onrender.com/api/payment",
           { name, upi, amount },
           {
             headers: {
-              Authorization: `Bearer ${token}`, // ✅ Add the token to the request header
+              Authorization: `Bearer ${token}`,
             },
           }
         );
-        const id = res.data.id;
+
+        // ✅ UPDATED: Capture both id and upiURI from the server response
+        const { id, upiURI } = res.data;
         const link = `${window.location.origin}/pay/${id}`;
+
         setShareLink(link);
-        return link;
+        setUpiURI(upiURI); // ✅ Set the UPI URI for the QR code
+
+        return { link, upiURI };
       } catch (error) {
         console.error(
           "Payment creation failed:",
@@ -61,16 +66,16 @@ const Payment = () => {
   };
 
   const generateQR = async () => {
-    const link = await createPayment();
-    if (link) {
+    const paymentData = await createPayment();
+    if (paymentData) {
       setShowQR(true);
       setShowLink(false);
     }
   };
 
   const generateLink = async () => {
-    const link = await createPayment();
-    if (link) {
+    const paymentData = await createPayment();
+    if (paymentData) {
       setShowLink(true);
       setShowQR(false);
     }
@@ -134,10 +139,11 @@ const Payment = () => {
               </button>
             </div>
           </div>
+          {/* ✅ UPDATED: The QR code now uses the direct UPI URI */}
           <div className="mt-8 bg-white p-6 rounded-lg text-center">
-            {showQR && shareLink && (
+            {showQR && upiURI && (
               <>
-                <QRCode value={shareLink} className="mx-auto" />
+                <QRCode value={upiURI} className="mx-auto" />
                 <p className="text-black mt-2 font-semibold">Scan to Pay</p>
               </>
             )}

@@ -11,10 +11,13 @@ const Signup = () => {
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/signup", {
-        username,
-        password,
-      });
+      const res = await axios.post(
+        "https://neonpay-server.onrender.com/api/auth/signup",
+        {
+          username,
+          password,
+        }
+      );
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("loggedIn", "true");
