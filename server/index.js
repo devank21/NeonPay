@@ -1,3 +1,4 @@
+// server/index.js
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -10,6 +11,7 @@ const authenticate = require("./middleware/auth");
 
 const app = express();
 const server = http.createServer(app);
+
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
 const corsOptions = {
@@ -23,21 +25,20 @@ const io = new Server(server, {
   cors: corsOptions,
 });
 
-app.use(cors());
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 
-const MONGO_URI = process.env.MONGO_URI;
 mongoose
-  .connect(MONGO_URI, {
+  .connect(process.env.MONGO_URI || "mongodb://localhost:27017/neonpay", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.log("MongoDB Error:", err));
 
+// ✅ UPDATED: Added expiresAt field to the schema
 const Payment = mongoose.model(
   "Payment",
   new mongoose.Schema({
@@ -47,13 +48,14 @@ const Payment = mongoose.model(
     userId: String,
     status: { type: String, default: "Unpaid" },
     createdAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date }, // New expiration field
   })
 );
 
-// ✅ UPDATED: This endpoint now returns the upiURI directly
 app.post("/api/payment", authenticate, async (req, res) => {
   const { name, upi, amount } = req.body;
   const userId = req.user.id;
+  const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 
   try {
     const newPayment = await Payment.create({
@@ -62,6 +64,8 @@ app.post("/api/payment", authenticate, async (req, res) => {
       amount,
       userId,
       status: "Unpaid",
+      // ✅ Set expiration time 10 minutes from now
+      expiresAt: new Date(Date.now() + TEN_MINUTES_IN_MS),
     });
 
     const upiURI = `upi://pay?pa=${newPayment.upi}&pn=${encodeURIComponent(
@@ -79,10 +83,25 @@ app.get("/api/payment/:id", async (req, res) => {
     const payment = await Payment.findById(req.params.id);
     if (!payment) return res.status(404).json({ error: "Not found" });
 
-    const upiURI = `upi://pay?pa=${payment.upi}&pn=${encodeURIComponent(
-      payment.name
-    )}&am=${payment.amount}&cu=INR`;
-    res.json({ upiURI, status: payment.status });
+    // ✅ NEW: Check if the payment is expired and update status if needed
+    if (payment.status === "Unpaid" && new Date() > payment.expiresAt) {
+      payment.status = "Expired";
+      await payment.save();
+    }
+
+    // Only generate a usable URI if the payment is still valid
+    const upiURI =
+      payment.status === "Unpaid"
+        ? `upi://pay?pa=${payment.upi}&pn=${encodeURIComponent(
+            payment.name
+          )}&am=${payment.amount}&cu=INR`
+        : "";
+
+    res.json({
+      upiURI,
+      status: payment.status,
+      expiresAt: payment.expiresAt, // Send expiration time to client
+    });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch payment" });
   }
@@ -94,12 +113,10 @@ app.get("/api/payments", authenticate, async (req, res) => {
 
   try {
     let query = { userId };
-
     if (search) {
       query.name = { $regex: search, $options: "i" };
     }
-
-    if (status && (status === "Paid" || status === "Unpaid")) {
+    if (status && ["Paid", "Unpaid", "Expired"].includes(status)) {
       query.status = status;
     }
 
@@ -114,16 +131,18 @@ app.post("/api/payment/:id/confirm", authenticate, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id);
     if (!payment) return res.status(404).json({ error: "Payment not found" });
-
     if (payment.userId !== req.user.id) {
       return res.status(403).json({ error: "Unauthorized" });
+    }
+    // ✅ NEW: Prevent confirming an expired payment
+    if (payment.status === "Expired" || new Date() > payment.expiresAt) {
+      return res.status(400).json({ error: "Payment request has expired" });
     }
 
     payment.status = "Paid";
     await payment.save();
 
     io.to(req.user.id).emit("paymentUpdated", payment);
-
     res.json({ message: "Payment confirmed", payment });
   } catch (err) {
     res.status(500).json({ error: "Failed to confirm payment" });
@@ -138,12 +157,18 @@ app.get("/api/stats", authenticate, async (req, res) => {
       userId,
       status: "Paid",
     });
-    const unpaidPayments = totalPayments - paidPayments;
+    const unpaidPayments = await Payment.countDocuments({
+      userId,
+      status: "Unpaid",
+    });
 
     const result = await Payment.aggregate([
       { $match: { userId: userId, status: "Paid" } },
       {
-        $group: { _id: null, totalAmount: { $sum: { $toDouble: "$amount" } } },
+        $group: {
+          _id: null,
+          totalAmount: { $sum: { $toDouble: "$amount" } },
+        },
       },
     ]);
 
@@ -165,7 +190,8 @@ io.on("connection", (socket) => {
   const token = socket.handshake.auth.token;
   if (token) {
     try {
-      const decoded = require("jsonwebtoken").verify(token, "supersecret");
+      const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
+      const decoded = require("jsonwebtoken").verify(token, JWT_SECRET);
       socket.join(decoded.id);
       console.log(`User ${decoded.username} joined room ${decoded.id}`);
     } catch (err) {
@@ -178,7 +204,6 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 5000;
-
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running with WebSocket support on port ${PORT}`)
 );
