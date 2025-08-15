@@ -1,3 +1,4 @@
+// client/src/pages/Payment.jsx
 import React, { useState, useEffect } from "react";
 import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
@@ -8,16 +9,24 @@ const Payment = () => {
   const [name, setName] = useState("");
   const [upi, setUpi] = useState("");
   const [amount, setAmount] = useState("");
+  const [note, setNote] = useState(""); // ✅ NEW: State for the payment note
   const [showQR, setShowQR] = useState(false);
   const [showLink, setShowLink] = useState(false);
   const [shareLink, setShareLink] = useState("");
-  const [upiURI, setUpiURI] = useState(""); // ✅ NEW: State for the direct UPI URI
+  const [upiURI, setUpiURI] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     const isLoggedIn = !!localStorage.getItem("token");
     if (!isLoggedIn) navigate("/login");
   }, [navigate]);
+
+  // ✅ NEW: Handler for the note input with character limit
+  const handleNoteChange = (e) => {
+    if (e.target.value.length <= 18) {
+      setNote(e.target.value);
+    }
+  };
 
   const createPayment = async () => {
     if (name && upi && amount) {
@@ -31,7 +40,7 @@ const Payment = () => {
 
         const res = await axios.post(
           "https://neonpay-server.onrender.com/api/payment",
-          { name, upi, amount },
+          { name, upi, amount, note }, // ✅ Send the note to the server
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -39,12 +48,11 @@ const Payment = () => {
           }
         );
 
-        // ✅ UPDATED: Capture both id and upiURI from the server response
         const { id, upiURI } = res.data;
         const link = `${window.location.origin}/pay/${id}`;
 
         setShareLink(link);
-        setUpiURI(upiURI); // ✅ Set the UPI URI for the QR code
+        setUpiURI(upiURI);
 
         return { link, upiURI };
       } catch (error) {
@@ -124,6 +132,20 @@ const Payment = () => {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
+            {/* ✅ NEW: Input field for the payment note */}
+            <div>
+              <input
+                type="text"
+                placeholder="Note (Optional, max 18 chars)"
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded"
+                value={note}
+                onChange={handleNoteChange}
+                maxLength="18"
+              />
+              <p className="text-right text-xs text-gray-400 mt-1">
+                {note.length}/18
+              </p>
+            </div>
             <div className="flex justify-between">
               <button
                 onClick={generateQR}
@@ -139,7 +161,6 @@ const Payment = () => {
               </button>
             </div>
           </div>
-          {/* ✅ UPDATED: The QR code now uses the direct UPI URI */}
           <div className="mt-8 bg-white p-6 rounded-lg text-center">
             {showQR && upiURI && (
               <>

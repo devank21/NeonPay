@@ -12,7 +12,6 @@ const PaymentHistory = () => {
   const [status, setStatus] = useState("all");
   const navigate = useNavigate();
 
-  // Use useCallback to prevent re-creating the function on every render
   const fetchPayments = useCallback(async () => {
     setLoading(true);
     try {
@@ -66,7 +65,6 @@ const PaymentHistory = () => {
           Payment History
         </h2>
 
-        {/* ✅ NEW: Filter and Search UI */}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <input
             type="text"
@@ -83,6 +81,7 @@ const PaymentHistory = () => {
             <option value="all">All Statuses</option>
             <option value="Paid">Paid</option>
             <option value="Unpaid">Unpaid</option>
+            <option value="Expired">Expired</option>
           </select>
         </div>
 
@@ -94,6 +93,8 @@ const PaymentHistory = () => {
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-4 py-2">Name</th>
+                  <th className="px-4 py-2">Note</th>
+                  {/* ✅ NEW: Note column header */}
                   <th className="px-4 py-2">UPI</th>
                   <th className="px-4 py-2">Amount</th>
                   <th className="px-4 py-2">Date</th>
@@ -105,6 +106,10 @@ const PaymentHistory = () => {
                 {payments.map((p) => (
                   <tr key={p._id} className="border-t border-gray-600">
                     <td className="px-4 py-2">{p.name}</td>
+                    <td className="px-4 py-2 text-gray-400 italic">
+                      {p.note || "-"}
+                    </td>
+                    {/* ✅ NEW: Note data cell */}
                     <td className="px-4 py-2">{p.upi}</td>
                     <td className="px-4 py-2">₹{p.amount}</td>
                     <td className="px-4 py-2">
@@ -115,6 +120,8 @@ const PaymentHistory = () => {
                         className={`px-2 py-1 text-xs font-semibold rounded-full ${
                           p.status === "Paid"
                             ? "bg-green-500 text-white"
+                            : p.status === "Expired"
+                            ? "bg-red-500 text-white"
                             : "bg-yellow-500 text-black"
                         }`}
                       >

@@ -38,22 +38,23 @@ mongoose
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.log("MongoDB Error:", err));
 
-// ✅ UPDATED: Added expiresAt field to the schema
+// ✅ UPDATED: Added 'note' field to the schema
 const Payment = mongoose.model(
   "Payment",
   new mongoose.Schema({
     name: String,
     upi: String,
     amount: String,
+    note: { type: String, maxlength: 18 }, // New field for payment note
     userId: String,
     status: { type: String, default: "Unpaid" },
     createdAt: { type: Date, default: Date.now },
-    expiresAt: { type: Date }, // New expiration field
+    expiresAt: { type: Date },
   })
 );
 
 app.post("/api/payment", authenticate, async (req, res) => {
-  const { name, upi, amount } = req.body;
+  const { name, upi, amount, note } = req.body; // ✅ Get note from request
   const userId = req.user.id;
   const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 
@@ -62,18 +63,24 @@ app.post("/api/payment", authenticate, async (req, res) => {
       name,
       upi,
       amount,
+      note, // ✅ Save the note
       userId,
       status: "Unpaid",
-      // ✅ Set expiration time 10 minutes from now
       expiresAt: new Date(Date.now() + TEN_MINUTES_IN_MS),
     });
 
+    // ✅ Add the note to the UPI URI string using the 'tn' parameter
     const upiURI = `upi://pay?pa=${newPayment.upi}&pn=${encodeURIComponent(
       newPayment.name
-    )}&am=${newPayment.amount}&cu=INR`;
+    )}&am=${newPayment.amount}&cu=INR&tn=${encodeURIComponent(
+      newPayment.note || ""
+    )}`;
 
     res.status(201).json({ id: newPayment._id.toString(), upiURI });
   } catch (err) {
+    if (err.errors && err.errors.note) {
+      return res.status(400).json({ error: err.errors.note.message });
+    }
     res.status(500).json({ error: "Failed to save payment" });
   }
 });
@@ -83,24 +90,25 @@ app.get("/api/payment/:id", async (req, res) => {
     const payment = await Payment.findById(req.params.id);
     if (!payment) return res.status(404).json({ error: "Not found" });
 
-    // ✅ NEW: Check if the payment is expired and update status if needed
     if (payment.status === "Unpaid" && new Date() > payment.expiresAt) {
       payment.status = "Expired";
       await payment.save();
     }
 
-    // Only generate a usable URI if the payment is still valid
     const upiURI =
       payment.status === "Unpaid"
         ? `upi://pay?pa=${payment.upi}&pn=${encodeURIComponent(
             payment.name
-          )}&am=${payment.amount}&cu=INR`
+          )}&am=${payment.amount}&cu=INR&tn=${encodeURIComponent(
+            payment.note || ""
+          )}`
         : "";
 
     res.json({
       upiURI,
       status: payment.status,
-      expiresAt: payment.expiresAt, // Send expiration time to client
+      expiresAt: payment.expiresAt,
+      note: payment.note, // ✅ Return the note
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch payment" });
@@ -134,7 +142,6 @@ app.post("/api/payment/:id/confirm", authenticate, async (req, res) => {
     if (payment.userId !== req.user.id) {
       return res.status(403).json({ error: "Unauthorized" });
     }
-    // ✅ NEW: Prevent confirming an expired payment
     if (payment.status === "Expired" || new Date() > payment.expiresAt) {
       return res.status(400).json({ error: "Payment request has expired" });
     }
